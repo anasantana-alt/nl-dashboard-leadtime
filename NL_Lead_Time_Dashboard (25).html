@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NL Lead Time Review Dashboard</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8f9fa; padding: 20px; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        h1 { margin: 30px 0 20px; color: #1f2937; }
+        .section { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; display: none; }
+        .section.show { display: block; }
+        .metric-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; margin: 20px 0; }
+        .metric-card { background: #f9fafb; padding: 15px; border-radius: 6px; text-align: center; }
+        .metric-value { font-size: 28px; font-weight: bold; margin-top: 8px; }
+        .upload-field { margin: 15px 0; }
+        .upload-field input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; }
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; }
+        th { background: #f3f4f6; font-weight: 600; }
+        textarea { width: 100%; height: 150px; padding: 12px; border: 1px solid #ddd; border-radius: 6px; font-family: monospace; font-size: 12px; margin: 10px 0; }
+        button { padding: 10px 16px; margin: 5px; border: none; border-radius: 6px; cursor: pointer; font-weight: 500; }
+        .info-box { background: #f0f9ff; border-left: 4px solid #0284c7; padding: 12px; border-radius: 4px; margin: 12px 0; font-size: 13px; }
+        .status { padding: 12px; border-radius: 6px; margin: 10px 0; }
+        .success { background: #dcfce7; color: #059669; }
+        .error { background: #fee2e2; color: #dc2626; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 NL Lead Time Review Dashboard</h1>
+        
+        <div class="section" style="display: block;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 20px;">
+                <div class="upload-field">
+                    <label><strong>Upload Threshold CSV</strong></label>
+                    <input type="file" id="thresholdUpload" accept=".csv">
+                </div>
+                <div class="upload-field">
+                    <label><strong>Upload Lead Time CSV</strong></label>
+                    <input type="file" id="csvUpload" accept=".csv">
+                </div>
+                <div class="upload-field">
+                    <label><strong>Upload Historical File (XLSX)</strong></label>
+                    <input type="file" id="historyUpload" accept=".xlsx">
+                </div>
+                <div class="upload-field">
+                    <label><strong>Running after weekend?</strong></label>
+                    <select id="weekendToggle" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
+                        <option value="auto">Auto-detect</option>
+                        <option value="yes">Yes, compare to Friday</option>
+                        <option value="no">No, normal weekday</option>
+                    </select>
+                </div>
+            </div>
+            <div id="statusDiv"></div>
+            <div id="thresholdInfo"></div>
+            <div class="info-box">Upload threshold CSV once (saved to browser) - upload lead time CSV daily.</div>
+        </div>
+
+        <div id="summarySection" class="section">
+            <h2>Daily Analysis</h2>
+            <div class="metric-grid">
+                <div class="metric-card"><div style="color:#999;font-size:12px;">Total SKUs</div><div class="metric-value" id="totalSkus">0</div></div>
+                <div class="metric-card"><div style="color:#999;font-size:12px;">Newly OOS</div><div class="metric-value" id="newlyOosCount">0</div></div>
+                <div class="metric-card"><div style="color:#999;font-size:12px;">OOS Today</div><div class="metric-value" id="oosCount">0</div></div>
+                <div class="metric-card"><div style="color:#999;font-size:12px;">BIS Today</div><div class="metric-value" id="bisCount">0</div></div>
+                <div class="metric-card"><div style="color:#999;font-size:12px;">Alerts</div><div class="metric-value" id="alertCount">0</div></div>
+            </div>
+            <h3>Teams Summary (Copy & Paste)</h3>
+            <textarea id="teamsSummary"></textarea>
+            <button onclick="copyText('teamsSummary')" style="background: #dbeafe; color: #0284c7;">Copy Summary</button>
+        </div>
+
+        <div id="actionSection" class="section">
+            <div id="newlyOosSection"></div>
+            <div id="bisSection"></div>
+            <div id="oosSection"></div>
+            <div id="alertSection"></div>
+        </div>
+
+        <div id="approvalSection" class="section">
+            <button onclick="generateJira()" style="background: #dcfce7; color: #059669;">Approve & Generate Jira</button>
+            <button onclick="updateHistory()" style="background: #dbeafe; color: #0284c7;">Update & Download History</button>
+            <button onclick="reset()" style="background: #f3f4f6;">Clear</button>
+        </div>
+
+        <div id="jiraSection" class="section">
+            <h2>Jira Ticket</h2>
+            <textarea id="jiraText"></textarea>
+            <button onclick="copyText('jiraText')" style="background: #3b82f6; color: white;">Copy Jira</button>
+        </div>
+    </div>
+
+    <script>
+        let thresholdMap = {};
+        let allData = [];
+        let reviewData = [];
+        let historyWorkbook = null;
+        let latestDateStr = '';
+        let previousDateStr = '';
+
+        window.addEventListener('load', function() {
+            console.log('✓ Page loaded, initializing...');
+            
+            loadThresholds();
+            
+            // Test the toggle
+            const toggle = document.getElementById('weekendToggle');
+            if (toggle) {
+                console.log('✓ Toggle found');
+                toggle.addEventListener('change', function() {
+                    console.log('✓ Toggle changed to:', this.value);
+                });
+            } else {
+                console.error('✗ Toggle NOT found');
+            }
+            
+            // Test CSV upload
+            const csvInput = document.getElementById('csvUpload');
+            if (csvInput) {
+                console.log('✓ CSV input found');
+            } else {
+                console.error('✗ CSV input NOT found');
+            }
+        });
+
+        function loadThresholds() {
+            const saved = localStorage.getItem('nl-leadtime-thresholds');
+            if (saved) {
+                thresholdMap = JSON.parse(saved);
+                const date = new Date(localStorage.getItem('nl-leadtime-thresholds-timestamp')).toLocaleString();
+                document.getElementById('thresholdInfo').innerHTML = `<div class="status success">✓ Thresholds loaded (${Object.keys(thresholdMap).length} SKUs) - Last saved: ${date}</div>`;
+            }
+        }
+
+        document.getElementById('thresholdUpload').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                try {
+                    const csv = event.target.result;
+                    const lines = csv.split('\n');
+                    thresholdMap = {};
+                    for (let i = 1; i < lines.length; i++) {
+                        const [name, sku, alert, oos] = lines[i].split(',').map(s => s.trim());
+                        if (sku && name) {
+                            thresholdMap[sku] = { name, alert: 15, oos: 30 };
+                        }
+                    }
+                    localStorage.setItem('nl-leadtime-thresholds', JSON.stringify(thresholdMap));
+                    localStorage.setItem('nl-leadtime-thresholds-timestamp', new Date().toISOString());
+                    document.getElementById('statusDiv').innerHTML = `<div class="status success">✓ ${Object.keys(thresholdMap).length} thresholds loaded</div>`;
+                } catch (err) {
+                    document.getElementById('statusDiv').innerHTML = `<div class="status error">Error: ${err.message}</div>`;
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        document.getElementById('csvUpload').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            if (Object.keys(thresholdMap).length === 0) {
+                alert('Upload threshold CSV first');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                try {
+                    let csv = event.target.result;
+                    if (csv.charCodeAt(0) === 0xFEFF) csv = csv.slice(1);
+                    const lines = csv.split(/\r?\n/).filter(l => l.trim());
+                    const delimiter = lines[0].includes('\t') ? '\t' : ',';
+                    const headers = lines[1].split(delimiter);
+                    const dateColumns = headers.slice(3).filter(h => /\d{4}-\d{2}-\d{2}/.test(h));
+                    
+                    latestDateStr = dateColumns[dateColumns.length - 1];
+                    previousDateStr = dateColumns[dateColumns.length - 2];
+                    
+                    const weekendMode = document.getElementById('weekendToggle').value;
+                    console.log('Weekend mode selected:', weekendMode);
+                    console.log('Available dates:', dateColumns.slice(-5));
+                    
+                    let lastWorkingDayStr = previousDateStr;
+                    
+                    if (weekendMode === 'yes') {
+                        // User says it's Monday - find last Friday
+                        console.log('Looking for Friday...');
+                        for (let i = dateColumns.length - 1; i >= 0; i--) {
+                            const date = new Date(dateColumns[i]);
+                            const dayOfWeek = date.getDay();
+                            console.log(`${dateColumns[i]} = day ${dayOfWeek}`);
+                            if (dayOfWeek === 5) {
+                                // Friday
+                                lastWorkingDayStr = dateColumns[i];
+                                console.log('✓ Found Friday:', lastWorkingDayStr);
+                                break;
+                            }
+                        }
+                    } else if (weekendMode === 'auto') {
+                        // Check for weekend gap
+                        const lastDate = new Date(latestDateStr);
+                        const prevDate = new Date(previousDateStr);
+                        const daysBetween = Math.floor((lastDate - prevDate) / (1000 * 60 * 60 * 24));
+                        console.log('Auto-detect: days between', previousDateStr, 'and', latestDateStr, '=', daysBetween);
+                        
+                        if (daysBetween > 1) {
+                            console.log('Weekend gap detected! Finding working day...');
+                            for (let i = dateColumns.length - 2; i >= 0; i--) {
+                                const date = new Date(dateColumns[i]);
+                                if (date.getDay() !== 6 && date.getDay() !== 0) {
+                                    lastWorkingDayStr = dateColumns[i];
+                                    console.log('✓ Found working day:', lastWorkingDayStr);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    
+                    console.log('Final comparison:', lastWorkingDayStr, '→', latestDateStr);
+
+                    const skuMap = {};
+                    for (let i = 2; i < lines.length; i++) {
+                        const parts = lines[i].split(delimiter);
+                        if (parts[0].trim() === 'NL' && parts[1].trim() in thresholdMap && parts[2].includes('Calculated Days Total Lead Time To')) {
+                            const sku = parts[1].trim();
+                            const todayIdx = headers.indexOf(latestDateStr);
+                            const lastWorkingIdx = headers.indexOf(lastWorkingDayStr);
+                            skuMap[sku] = {
+                                sku,
+                                skuName: thresholdMap[sku].name,
+                                todayLT: parseFloat(parts[todayIdx]) || 0,
+                                yesterdayLT: parseFloat(parts[lastWorkingIdx]) || 0,
+                                thresholds: thresholdMap[sku]
+                            };
+                        }
+                    }
+
+                    allData = Object.values(skuMap);
+                    analyzeData();
+                    document.getElementById('statusDiv').innerHTML = `<div class="status success">✓ ${allData.length} SKUs analyzed (comparing ${lastWorkingDayStr} → ${latestDateStr})</div>`;
+                } catch (err) {
+                    document.getElementById('statusDiv').innerHTML = `<div class="status error">Error: ${err.message}</div>`;
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        document.getElementById('historyUpload').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file || typeof XLSX === 'undefined') return;
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                try {
+                    historyWorkbook = XLSX.read(event.target.result, { type: 'array' });
+                    document.getElementById('statusDiv').innerHTML = `<div class="status success">✓ Historical file loaded</div>`;
+                } catch (err) {
+                    document.getElementById('statusDiv').innerHTML = `<div class="status error">Error: ${err.message}</div>`;
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        function analyzeData() {
+            reviewData = allData.map(item => {
+                const aboveOOS = item.todayLT > 30;
+                const wasAboveOOS = item.yesterdayLT > 30;
+                let severity = 'normal';
+                
+                if (aboveOOS && !wasAboveOOS) severity = 'newly-oos';
+                else if (!aboveOOS && wasAboveOOS) severity = 'bis';
+                else if (aboveOOS) severity = 'oos';
+                else if (item.todayLT > 15) severity = 'alert';
+                
+                return { ...item, severity };
+            });
+
+            displayResults();
+        }
+
+        function displayResults() {
+            const newlyOos = reviewData.filter(r => r.severity === 'newly-oos');
+            const bis = reviewData.filter(r => r.severity === 'bis');
+            const oos = reviewData.filter(r => r.severity === 'oos');
+            const alerts = reviewData.filter(r => r.severity === 'alert');
+
+            document.getElementById('totalSkus').textContent = allData.length;
+            document.getElementById('newlyOosCount').textContent = newlyOos.length;
+            document.getElementById('oosCount').textContent = oos.length;
+            document.getElementById('bisCount').textContent = bis.length;
+            document.getElementById('alertCount').textContent = alerts.length;
+
+            let html = '';
+
+            if (newlyOos.length > 0) {
+                html += `<div style="background: #fecaca; padding: 15px; border-radius: 6px; margin-bottom: 20px;">
+                    <h3>⚡ Newly Out of Stock (Crossed TODAY)</h3>
+                    <table><tbody>` +
+                    newlyOos.map(r => `<tr><td>${r.sku}</td><td>${r.skuName}</td><td>${r.todayLT.toFixed(1)}d</td><td>↑ ${(r.todayLT - r.yesterdayLT).toFixed(1)}d</td><td><input type="checkbox" class="newly-oos-item" value="${r.sku}" checked onchange="updateTeamsSummary()"></td></tr>`).join('') +
+                    `</tbody></table></div>`;
+            }
+
+            if (bis.length > 0) {
+                html += `<div style="background: #dcfce7; padding: 15px; border-radius: 6px; margin-bottom: 20px;">
+                    <h3>✓ Back In Stock Today</h3>
+                    <table><tbody>` +
+                    bis.map(r => `<tr><td>${r.sku}</td><td>${r.skuName}</td><td>${r.todayLT.toFixed(1)}d</td><td>↓ ${(r.yesterdayLT - r.todayLT).toFixed(1)}d</td></tr>`).join('') +
+                    `</tbody></table></div>`;
+            }
+
+            if (oos.length > 0) {
+                html += `<div style="background: #fee2e2; padding: 15px; border-radius: 6px; margin-bottom: 20px;">
+                    <h3>✗ Out of Stock</h3>
+                    <table><tbody>` +
+                    oos.map(r => `<tr><td>${r.sku}</td><td>${r.skuName}</td><td>${r.todayLT.toFixed(1)}d</td><td><input type="checkbox" class="oos-item" value="${r.sku}" checked onchange="updateTeamsSummary()"></td></tr>`).join('') +
+                    `</tbody></table></div>`;
+            }
+
+            if (alerts.length > 0) {
+                html += `<div style="background: #fef3c7; padding: 15px; border-radius: 6px;">
+                    <h3>⚠ Alerts (15-30d)</h3>
+                    <table><tbody>` +
+                    alerts.map(r => `<tr><td>${r.sku}</td><td>${r.skuName}</td><td>${r.todayLT.toFixed(1)}d</td></tr>`).join('') +
+                    `</tbody></table></div>`;
+            }
+
+            document.getElementById('actionSection').innerHTML = html;
+            buildTeamsSummary();
+            document.getElementById('summarySection').classList.add('show');
+            document.getElementById('actionSection').classList.add('show');
+            document.getElementById('approvalSection').classList.add('show');
+        }
+
+        function updateTeamsSummary() {
+            const newlyOosChecked = Array.from(document.querySelectorAll('.newly-oos-item:checked')).map(el => el.value);
+            const oosChecked = Array.from(document.querySelectorAll('.oos-item:checked')).map(el => el.value);
+            
+            const newlyOos = reviewData.filter(r => r.severity === 'newly-oos' && newlyOosChecked.includes(r.sku));
+            const bis = reviewData.filter(r => r.severity === 'bis');
+            const oos = reviewData.filter(r => r.severity === 'oos' && oosChecked.includes(r.sku));
+            const oosUnchecked = reviewData.filter(r => r.severity === 'oos' && !oosChecked.includes(r.sku));
+            const alerts = reviewData.filter(r => r.severity === 'alert');
+
+            let summary = `📊 NL Lead Time Update — ${latestDateStr}
+
+🔴 ${newlyOos.length} Newly OOS  🟡 ${oos.length} OOS  🟢 ${bis.length} BIS  ⚠️ ${alerts.length} Alerts`;
+
+            if (newlyOos.length > 0) {
+                summary += `\n\n⚡ NEWLY OUT OF STOCK (crossed today):\n` + newlyOos.map(r => `• ${r.sku} — ${r.skuName} (${r.todayLT.toFixed(0)}d)`).join('\n');
+            }
+
+            if (oos.length > 0) {
+                summary += `\n\n✗ OUT OF STOCK (still above 30d):\n` + oos.map(r => `• ${r.sku} — ${r.skuName} (${r.todayLT.toFixed(0)}d)`).join('\n');
+            }
+
+            if (bis.length > 0) {
+                summary += `\n\n✅ BACK IN STOCK TODAY (recovered):\n` + bis.map(r => `• ${r.sku} — ${r.skuName} (${r.todayLT.toFixed(0)}d)`).join('\n');
+            }
+
+            if (oosUnchecked.length > 0) {
+                summary += `\n\n🔶 STRATEGIC HOLD (not putting OOS):\n` + oosUnchecked.map(r => `• ${r.sku} — ${r.skuName} (${r.todayLT.toFixed(0)}d vs 30d threshold)`).join('\n');
+            }
+
+            if (alerts.length > 0) {
+                summary += `\n\n📌 LEADTIME ALERTS (15-30d):\n` + alerts.slice(0, 5).map(r => `• ${r.sku} (${r.todayLT.toFixed(0)}d)`).join('\n');
+                if (alerts.length > 5) summary += `\n... and ${alerts.length - 5} more`;
+            }
+
+            document.getElementById('teamsSummary').value = summary;
+        }
+
+        function buildTeamsSummary() {
+            updateTeamsSummary();
+        }
+
+        function generateJira() {
+            const newlyOosSelected = Array.from(document.querySelectorAll('.newly-oos-item:checked')).map(el => el.value);
+            const newlyOos = reviewData.filter(r => r.severity === 'newly-oos' && newlyOosSelected.includes(r.sku));
+            const bis = reviewData.filter(r => r.severity === 'bis');
+
+            let jira = `[NL] Daily Lead Time Review - ${latestDateStr}
+
+*Summary:*
+• ⚡ Newly OOS (crossed today): ${newlyOos.length}
+• ✓ Back In Stock Today: ${bis.length}
+
+`;
+
+            if (newlyOos.length > 0) {
+                jira += `*⚡ Newly Out of Stock (Crossed TODAY):*\n` + newlyOos.map(r => `• ${r.sku} - ${r.skuName} (LT: ${r.todayLT.toFixed(1)}d)`).join('\n') + '\n\n';
+            }
+
+            if (bis.length > 0) {
+                jira += `*✓ Back In Stock Today:*\n` + bis.map(r => `• ${r.sku} - ${r.skuName} (LT: ${r.todayLT.toFixed(1)}d)`).join('\n') + '\n\n';
+            }
+
+            document.getElementById('jiraText').value = jira;
+            document.getElementById('jiraSection').classList.add('show');
+        }
+
+        function excelDateToJSDate(excelDate) {
+            // Excel serial date: days since 1900-01-01 (with 1900 leap year bug)
+            // 1 = 1900-01-01, 60 = 1900-02-29 (bug), etc.
+            const excelEpoch = new Date(1900, 0, 1);
+            const jsDate = new Date(excelEpoch.getTime() + (excelDate - 2) * 86400000);
+            return jsDate;
+        }
+
+        function updateHistory() {
+            if (!historyWorkbook) {
+                alert('Please upload historical file first');
+                return;
+            }
+
+            try {
+                const sheetName = historyWorkbook.SheetNames[0];
+                const worksheet = historyWorkbook.Sheets[sheetName];
+                
+                console.log('Looking for date:', latestDateStr);
+                const todayDate = new Date(latestDateStr);
+                console.log('Parsed as:', todayDate);
+                
+                // Find today's date column
+                let todayCol = null;
+                let foundDates = [];
+                
+                for (let col = 3; col <= 50; col++) {
+                    const colLetter = XLSX.utils.encode_col(col - 1);
+                    const cell = worksheet[colLetter + '1'];
+                    if (!cell || !cell.v) break;
+                    
+                    let header = cell.v;
+                    
+                    // Convert Excel serial number to Date if needed
+                    if (typeof header === 'number') {
+                        header = excelDateToJSDate(header);
+                    }
+                    
+                    foundDates.push(header.toString ? header.toString() : header);
+                    console.log(`Column ${colLetter}: ${header}`);
+                    
+                    if (header instanceof Date) {
+                        const match = header.getFullYear() === todayDate.getFullYear() &&
+                                     header.getMonth() === todayDate.getMonth() &&
+                                     header.getDate() === todayDate.getDate();
+                        
+                        if (match) {
+                            todayCol = colLetter;
+                            console.log('✓ Found match at column:', todayCol);
+                            break;
+                        }
+                    }
+                }
+
+                if (!todayCol) {
+                    alert(`Date "${latestDateStr}" not found.\n\nFile contains:\n${foundDates.slice(0, 10).join(', ')}...`);
+                    return;
+                }
+
+                const newlyOosChecked = Array.from(document.querySelectorAll('.newly-oos-item:checked')).map(el => el.value);
+                const oosChecked = Array.from(document.querySelectorAll('.oos-item:checked')).map(el => el.value);
+                const bisSelected = reviewData.filter(r => r.severity === 'bis');
+
+                const newlyOos = reviewData.filter(r => r.severity === 'newly-oos' && newlyOosChecked.includes(r.sku));
+                const oos = reviewData.filter(r => r.severity === 'oos' && oosChecked.includes(r.sku));
+
+                // Update values
+                const range = XLSX.utils.decode_range(worksheet['!ref']);
+                for (let row = 2; row <= range.e.r + 1; row++) {
+                    const skuCell = worksheet[XLSX.utils.encode_col(1) + row];
+                    if (!skuCell || !skuCell.v) continue;
+                    
+                    const sku = skuCell.v;
+                    const cell = todayCol + row;
+                    
+                    if ([...newlyOos, ...oos].some(r => r.sku === sku)) {
+                        worksheet[cell] = { v: 1, t: 'n' };
+                    }
+                    else if (bisSelected.some(r => r.sku === sku)) {
+                        worksheet[cell] = { v: 0, t: 'n' };
+                    }
+                }
+
+                // Download
+                const wbout = XLSX.write(historyWorkbook, { bookType: 'xlsx', type: 'array' });
+                const blob = new Blob([wbout], { type: 'application/octet-stream' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `NL_Leadtime_History_${latestDateStr}.xlsx`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+
+                alert('✓ Historical file updated and downloaded!');
+            } catch (err) {
+                alert('Error: ' + err.message);
+                console.error(err);
+            }
+        }
+
+        function copyText(id) {
+            document.getElementById(id).select();
+            document.execCommand('copy');
+            alert('✓ Copied!');
+        }
+
+        function reset() {
+            location.reload();
+        }
+    </script>
+</body>
+</html>
