@@ -310,8 +310,7 @@
             }
 
             if (alerts.length > 0) {
-                summary += `\n\n📌 LEADTIME ALERTS (15-30d):\n` + alerts.slice(0, 5).map(r => `• ${r.sku} (${r.todayLT.toFixed(0)}d)`).join('\n');
-                if (alerts.length > 5) summary += `\n... and ${alerts.length - 5} more`;
+                summary += `\n\n📌 LEADTIME ALERTS (15-30d):\n` + alerts.map(r => `• ${r.sku} — ${r.skuName} (${r.todayLT.toFixed(0)}d)`).join('\n');
             }
 
             document.getElementById('teamsSummary').value = summary;
