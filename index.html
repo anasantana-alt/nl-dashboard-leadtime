@@ -363,44 +363,36 @@
                 const sheetName = historyWorkbook.SheetNames[0];
                 const worksheet = historyWorkbook.Sheets[sheetName];
                 
-                console.log('Looking for date:', latestDateStr);
-                const todayDate = new Date(latestDateStr);
-                console.log('Parsed as:', todayDate);
+                // Use TODAY's date (system date), not the CSV date
+                const today = new Date();
+                const todayStr = today.toISOString().split('T')[0];
+                console.log('Updating for today (system date):', todayStr);
                 
-                // Find today's date column
+                // Find today's date column in the historical file
                 let todayCol = null;
-                let foundDates = [];
-                
-                for (let col = 3; col <= 50; col++) {
+                for (let col = 3; col <= 300; col++) {
                     const colLetter = XLSX.utils.encode_col(col - 1);
                     const cell = worksheet[colLetter + '1'];
                     if (!cell || !cell.v) break;
                     
                     let header = cell.v;
-                    
-                    // Convert Excel serial number to Date if needed
                     if (typeof header === 'number') {
                         header = excelDateToJSDate(header);
                     }
                     
-                    foundDates.push(header.toString ? header.toString() : header);
-                    console.log(`Column ${colLetter}: ${header}`);
-                    
                     if (header instanceof Date) {
-                        const match = header.getFullYear() === todayDate.getFullYear() &&
-                                     header.getMonth() === todayDate.getMonth() &&
-                                     header.getDate() === todayDate.getDate();
-                        
-                        if (match) {
+                        if (header.getFullYear() === today.getFullYear() &&
+                            header.getMonth() === today.getMonth() &&
+                            header.getDate() === today.getDate()) {
                             todayCol = colLetter;
-                            console.log('✓ Found match at column:', todayCol);
+                            console.log('✓ Found today\'s column:', todayCol, 'for date:', todayStr);
                             break;
                         }
                     }
                 }
 
                 if (!todayCol) {
-                    alert(`Date "${latestDateStr}" not found.\n\nFile contains:\n${foundDates.slice(0, 10).join(', ')}...`);
+                    alert(`Today's date (${todayStr}) not found in historical file.\n\nMake sure the file has today's date as a column header.`);
                     return;
                 }
 
@@ -428,19 +420,19 @@
                     }
                 }
 
-                // Download
+                // Download with today's date
                 const wbout = XLSX.write(historyWorkbook, { bookType: 'xlsx', type: 'array' });
                 const blob = new Blob([wbout], { type: 'application/octet-stream' });
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
                 link.href = url;
-                link.download = `NL_Leadtime_History_${latestDateStr}.xlsx`;
+                link.download = `NL_Leadtime_History_${todayStr}.xlsx`;
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
                 URL.revokeObjectURL(url);
 
-                alert('✓ Historical file updated and downloaded!');
+                alert('✓ Historical file updated for ' + todayStr + ' and downloaded!');
             } catch (err) {
                 alert('Error: ' + err.message);
                 console.error(err);
