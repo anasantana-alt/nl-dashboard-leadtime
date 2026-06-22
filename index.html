@@ -212,18 +212,22 @@
                     latestDateStr = dateColumns[dateColumns.length - 1];
                     previousDateStr = dateColumns[dateColumns.length - 2];
                     
-                    // Always smart: find the last working day (skip weekends)
-                    console.log('Finding last working day...');
+                    // Smart weekend detection using system date
+                    const today = new Date();
+                    const todayDayOfWeek = today.getDay(); // 0=Sun, 1=Mon, 5=Fri, 6=Sat
+                    
                     let lastWorkingDayStr = previousDateStr;
                     
-                    for (let i = dateColumns.length - 2; i >= 0; i--) {
-                        const date = new Date(dateColumns[i]);
-                        const dayOfWeek = date.getDay();
-                        // 0 = Sunday, 6 = Saturday
-                        if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-                            lastWorkingDayStr = dateColumns[i];
-                            console.log(`✓ Last working day: ${lastWorkingDayStr} (day ${dayOfWeek})`);
-                            break;
+                    // If today is early in the week (Mon-Fri), look for last Friday in CSV
+                    if (todayDayOfWeek >= 1 && todayDayOfWeek <= 5) {
+                        // Find the last Friday in the date columns
+                        for (let i = dateColumns.length - 1; i >= 0; i--) {
+                            const date = new Date(dateColumns[i]);
+                            if (date.getDay() === 5) { // Friday = 5
+                                lastWorkingDayStr = dateColumns[i];
+                                console.log('✓ Found last Friday in CSV:', lastWorkingDayStr);
+                                break;
+                            }
                         }
                     }
                     
