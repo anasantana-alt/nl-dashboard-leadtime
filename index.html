@@ -355,6 +355,7 @@
             const newlyOos = reviewData.filter(r => r.severity === 'newly-oos' && newlyOosChecked.includes(r.sku));
             const bis = reviewData.filter(r => r.severity === 'bis');
             const oos = reviewData.filter(r => r.severity === 'oos' && oosChecked.includes(r.sku));
+            const oosUnchecked = reviewData.filter(r => r.severity === 'oos' && !oosChecked.includes(r.sku));
             const alerts = reviewData.filter(r => r.severity === 'alert');
 
             // Group by product name
@@ -444,6 +445,15 @@
                 const grouped = groupByProduct(bis);
                 Object.entries(grouped).forEach(([product, sizes]) => {
                     summary += `\n• ${product}: ${sizes.map(s => `${s.size} (${s.lt}d)`).join(', ')}`;
+                });
+            }
+
+            // Strategic Holds (unchecked OOS items)
+            if (oosUnchecked.length > 0) {
+                summary += `\n\n🔶 STRATEGIC HOLD (not putting OOS):`;
+                const grouped = groupByProduct(oosUnchecked);
+                Object.entries(grouped).forEach(([product, sizes]) => {
+                    summary += `\n• ${product}: ${sizes.map(s => `${s.size} (${s.lt}d vs 30d threshold)`).join(', ')}`;
                 });
             }
 
