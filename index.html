@@ -405,7 +405,7 @@
                     summary += `\n\n⚡ NEWLY OUT OF STOCK - CURRENTLY DISCOUNTED:`;
                     const grouped = groupByProduct(discounted);
                     Object.entries(grouped).forEach(([product, sizes]) => {
-                        summary += `\n• ${product}: ${sizes.map(s => `${s.size} (${s.lt}d)`).join(', ')}`;
+                    summary += `\n• ${product}:\n  ${sizes.map(s => `* ${s.size} (${s.lt}d)`).join('\n  ')}`;
                     });
                 }
                 
@@ -413,7 +413,7 @@
                     summary += `\n\n⚡ NEWLY OUT OF STOCK - NOT IN DISCOUNT PERIOD:`;
                     const grouped = groupByProduct(notDiscounted);
                     Object.entries(grouped).forEach(([product, sizes]) => {
-                        summary += `\n• ${product}: ${sizes.map(s => `${s.size} (${s.lt}d)`).join(', ')}`;
+                        summary += `\n• ${product}:\n  ${sizes.map(s => `* ${s.size} (${s.lt}d)`).join('\n  ')}`;
                     });
                 }
             }
@@ -426,7 +426,7 @@
                     summary += `\n\n✗ OUT OF STOCK - CURRENTLY DISCOUNTED:`;
                     const grouped = groupByProduct(discounted);
                     Object.entries(grouped).forEach(([product, sizes]) => {
-                        summary += `\n• ${product}: ${sizes.map(s => `${s.size} (${s.lt}d)`).join(', ')}`;
+                        summary += `\n• ${product}:\n  ${sizes.map(s => `* ${s.size} (${s.lt}d)`).join('\n  ')}`;
                     });
                 }
                 
@@ -434,7 +434,7 @@
                     summary += `\n\n✗ OUT OF STOCK - NOT IN DISCOUNT PERIOD:`;
                     const grouped = groupByProduct(notDiscounted);
                     Object.entries(grouped).forEach(([product, sizes]) => {
-                        summary += `\n• ${product}: ${sizes.map(s => `${s.size} (${s.lt}d)`).join(', ')}`;
+                        summary += `\n• ${product}:\n  ${sizes.map(s => `* ${s.size} (${s.lt}d)`).join('\n  ')}`;
                     });
                 }
             }
@@ -444,7 +444,7 @@
                 summary += `\n\n✅ BACK IN STOCK TODAY:`;
                 const grouped = groupByProduct(bis);
                 Object.entries(grouped).forEach(([product, sizes]) => {
-                    summary += `\n• ${product}: ${sizes.map(s => `${s.size} (${s.lt}d)`).join(', ')}`;
+                    summary += `\n• ${product}:\n  ${sizes.map(s => `* ${s.size} (${s.lt}d)`).join('\n  ')}`;
                 });
             }
 
@@ -453,7 +453,7 @@
                 summary += `\n\n🔶 STRATEGIC HOLD (not putting OOS):`;
                 const grouped = groupByProduct(oosUnchecked);
                 Object.entries(grouped).forEach(([product, sizes]) => {
-                    summary += `\n• ${product}: ${sizes.map(s => `${s.size} (${s.lt}d vs 30d threshold)`).join(', ')}`;
+                    summary += `\n• ${product}:\n  ${sizes.map(s => `* ${s.size} (${s.lt}d vs 30d threshold)`).join('\n  ')}`;
                 });
             }
 
@@ -465,7 +465,7 @@
                     summary += `\n\n⚠️ ALERTS - CURRENTLY DISCOUNTED:`;
                     const grouped = groupByProduct(discounted);
                     Object.entries(grouped).forEach(([product, sizes]) => {
-                        summary += `\n• ${product}: ${sizes.map(s => `${s.size} (${s.lt}d)`).join(', ')}`;
+                        summary += `\n• ${product}:\n  ${sizes.map(s => `* ${s.size} (${s.lt}d)`).join('\n  ')}`;
                     });
                 }
                 
@@ -473,7 +473,7 @@
                     summary += `\n\n⚠️ ALERTS - NOT IN DISCOUNT PERIOD:`;
                     const grouped = groupByProduct(notDiscounted);
                     Object.entries(grouped).forEach(([product, sizes]) => {
-                        summary += `\n• ${product}: ${sizes.map(s => `${s.size} (${s.lt}d)`).join(', ')}`;
+                        summary += `\n• ${product}:\n  ${sizes.map(s => `* ${s.size} (${s.lt}d)`).join('\n  ')}`;
                     });
                 }
             }
