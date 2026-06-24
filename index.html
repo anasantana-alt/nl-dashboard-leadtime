@@ -130,14 +130,22 @@
             return false;
         }
 
-        function extractSizeFromSKU(sku) {
-            // Extract size from position 5-10: "120200" → "120x200"
+        function extractSizeFromSKU(sku, productName) {
+            // Try to extract size from SKU position 5-10: "120200" → "120x200"
             if (sku.length >= 11) {
                 const sizeStr = sku.substring(5, 11);
                 if (sizeStr.match(/^\d{6}$/)) {
                     return sizeStr.substring(0, 3) + 'x' + sizeStr.substring(3);
                 }
             }
+            
+            // If SKU parsing failed, look for size pattern in product name
+            // Matches: "180 x 210", "140x200", "180x210", etc.
+            const sizeMatch = productName.match(/(\d{2,3})\s*x\s*(\d{2,3})/i);
+            if (sizeMatch) {
+                return sizeMatch[1] + 'x' + sizeMatch[2];
+            }
+            
             return 'Unknown';
         }
 
@@ -367,7 +375,7 @@
                         grouped[productName] = [];
                     }
                     grouped[productName].push({
-                        size: extractSizeFromSKU(item.sku),
+                        size: extractSizeFromSKU(item.sku, productName),
                         lt: item.todayLT.toFixed(0),
                         sku: item.sku
                     });
