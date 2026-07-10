@@ -50,7 +50,7 @@
             <div id="thresholdInfo"></div>
             <div class="info-box">Upload threshold CSV once (saved to browser) - upload lead time CSV daily.</div>
         </div>
-
+ 
         <div id="summarySection" class="section">
             <h2>Daily Analysis</h2>
             <div class="metric-grid">
@@ -64,27 +64,27 @@
             <textarea id="teamsSummary"></textarea>
             <button onclick="copyText('teamsSummary')" style="background: #dbeafe; color: #0284c7;">Copy Summary</button>
         </div>
-
+ 
         <div id="actionSection" class="section">
             <div id="newlyOosSection"></div>
             <div id="bisSection"></div>
             <div id="oosSection"></div>
             <div id="alertSection"></div>
         </div>
-
+ 
         <div id="approvalSection" class="section">
             <button onclick="generateJira()" style="background: #dcfce7; color: #059669;">Approve & Generate Jira</button>
             <button onclick="updateHistory()" style="background: #dbeafe; color: #0284c7;">Update & Download History</button>
             <button onclick="reset()" style="background: #f3f4f6;">Clear</button>
         </div>
-
+ 
         <div id="jiraSection" class="section">
             <h2>Jira Ticket</h2>
             <textarea id="jiraText"></textarea>
             <button onclick="copyText('jiraText')" style="background: #3b82f6; color: white;">Copy Jira</button>
         </div>
     </div>
-
+ 
     <script>
         // Discount periods (hardcoded)
         const discountPeriods = [
@@ -97,7 +97,7 @@
             { name: 'Black Friday', periodA: true, start: [10, 20], end: [11, 30] },
             { name: 'Holiday Sales', periodA: false, start: [12, 1], end: [12, 27] }
         ];
-
+ 
         function getDiscountPeriod(date) {
             const month = date.getMonth() + 1;
             const day = date.getDate();
@@ -120,7 +120,7 @@
             }
             return null;
         }
-
+ 
         function isProductDiscounted(skuName, currentPeriod) {
             const skuData = thresholdMap[skuName];
             if (!skuData || !skuData.period) return false;
@@ -129,7 +129,7 @@
             if (!currentPeriod.periodA && skuData.period === 'B') return true;
             return false;
         }
-
+ 
         function extractSizeFromSKU(sku, productName) {
             // Try to extract size from SKU position 5-10: "120200" → "120x200"
             if (sku.length >= 11) {
@@ -148,15 +148,15 @@
             
             return 'Unknown';
         }
-
+ 
         function extractProductName(skuName) {
             // Get product name from threshold file
             const skuData = thresholdMap[skuName];
             return skuData ? skuData.name : skuName;
         }
-
+ 
         window.addEventListener('load', loadThresholds);
-
+ 
         function loadThresholds() {
             const saved = localStorage.getItem('nl-leadtime-thresholds');
             if (saved) {
@@ -165,7 +165,7 @@
                 document.getElementById('thresholdInfo').innerHTML = `<div class="status success">✓ Thresholds loaded (${Object.keys(thresholdMap).length} SKUs) - Last saved: ${date}</div>`;
             }
         }
-
+ 
         document.getElementById('thresholdUpload').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -198,7 +198,7 @@
             };
             reader.readAsText(file);
         });
-
+ 
         document.getElementById('csvUpload').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -206,7 +206,7 @@
                 alert('Upload threshold CSV first');
                 return;
             }
-
+ 
             const reader = new FileReader();
             reader.onload = function(event) {
                 try {
@@ -220,27 +220,26 @@
                     latestDateStr = dateColumns[dateColumns.length - 1];
                     previousDateStr = dateColumns[dateColumns.length - 2];
                     
-                    // Smart weekend detection using system date
+                    // Smart weekend detection: only on Monday (compare Fri → Mon)
                     const today = new Date();
                     const todayDayOfWeek = today.getDay(); // 0=Sun, 1=Mon, 5=Fri, 6=Sat
                     
                     let lastWorkingDayStr = previousDateStr;
                     
-                    // If today is early in the week (Mon-Fri), look for last Friday in CSV
-                    if (todayDayOfWeek >= 1 && todayDayOfWeek <= 5) {
-                        // Find the last Friday in the date columns
+                    // Only if today is Monday, look for last Friday
+                    if (todayDayOfWeek === 1) { // Monday only
                         for (let i = dateColumns.length - 1; i >= 0; i--) {
                             const date = new Date(dateColumns[i]);
                             if (date.getDay() === 5) { // Friday = 5
                                 lastWorkingDayStr = dateColumns[i];
-                                console.log('✓ Found last Friday in CSV:', lastWorkingDayStr);
+                                console.log('✓ Monday detected - comparing to last Friday:', lastWorkingDayStr);
                                 break;
                             }
                         }
                     }
                     
                     console.log(`Comparing: ${lastWorkingDayStr} → ${latestDateStr}`);
-
+ 
                     const skuMap = {};
                     for (let i = 2; i < lines.length; i++) {
                         const parts = lines[i].split(delimiter);
@@ -257,7 +256,7 @@
                             };
                         }
                     }
-
+ 
                     allData = Object.values(skuMap);
                     analyzeData();
                     document.getElementById('statusDiv').innerHTML = `<div class="status success">✓ ${allData.length} SKUs analyzed (comparing ${lastWorkingDayStr} → ${latestDateStr})</div>`;
@@ -267,7 +266,7 @@
             };
             reader.readAsText(file);
         });
-
+ 
         document.getElementById('historyUpload').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file || typeof XLSX === 'undefined') return;
@@ -282,7 +281,7 @@
             };
             reader.readAsArrayBuffer(file);
         });
-
+ 
         function analyzeData() {
             reviewData = allData.map(item => {
                 const aboveOOS = item.todayLT > 30;
@@ -296,24 +295,24 @@
                 
                 return { ...item, severity };
             });
-
+ 
             displayResults();
         }
-
+ 
         function displayResults() {
             const newlyOos = reviewData.filter(r => r.severity === 'newly-oos');
             const bis = reviewData.filter(r => r.severity === 'bis');
             const oos = reviewData.filter(r => r.severity === 'oos');
             const alerts = reviewData.filter(r => r.severity === 'alert');
-
+ 
             document.getElementById('totalSkus').textContent = allData.length;
             document.getElementById('newlyOosCount').textContent = newlyOos.length;
             document.getElementById('oosCount').textContent = oos.length;
             document.getElementById('bisCount').textContent = bis.length;
             document.getElementById('alertCount').textContent = alerts.length;
-
+ 
             let html = '';
-
+ 
             if (newlyOos.length > 0) {
                 html += `<div style="background: #fecaca; padding: 15px; border-radius: 6px; margin-bottom: 20px;">
                     <h3>⚡ Newly Out of Stock (Crossed TODAY)</h3>
@@ -321,7 +320,7 @@
                     newlyOos.map(r => `<tr><td>${r.sku}</td><td>${r.skuName}</td><td>${r.todayLT.toFixed(1)}d</td><td>↑ ${(r.todayLT - r.yesterdayLT).toFixed(1)}d</td><td><input type="checkbox" class="newly-oos-item" value="${r.sku}" checked onchange="updateTeamsSummary()"></td></tr>`).join('') +
                     `</tbody></table></div>`;
             }
-
+ 
             if (bis.length > 0) {
                 html += `<div style="background: #dcfce7; padding: 15px; border-radius: 6px; margin-bottom: 20px;">
                     <h3>✓ Back In Stock Today</h3>
@@ -329,7 +328,7 @@
                     bis.map(r => `<tr><td>${r.sku}</td><td>${r.skuName}</td><td>${r.todayLT.toFixed(1)}d</td><td>↓ ${(r.yesterdayLT - r.todayLT).toFixed(1)}d</td></tr>`).join('') +
                     `</tbody></table></div>`;
             }
-
+ 
             if (oos.length > 0) {
                 html += `<div style="background: #fee2e2; padding: 15px; border-radius: 6px; margin-bottom: 20px;">
                     <h3>✗ Out of Stock</h3>
@@ -337,7 +336,7 @@
                     oos.map(r => `<tr><td>${r.sku}</td><td>${r.skuName}</td><td>${r.todayLT.toFixed(1)}d</td><td><input type="checkbox" class="oos-item" value="${r.sku}" checked onchange="updateTeamsSummary()"></td></tr>`).join('') +
                     `</tbody></table></div>`;
             }
-
+ 
             if (alerts.length > 0) {
                 html += `<div style="background: #fef3c7; padding: 15px; border-radius: 6px;">
                     <h3>⚠ Alerts (15-30d)</h3>
@@ -345,14 +344,14 @@
                     alerts.map(r => `<tr><td>${r.sku}</td><td>${r.skuName}</td><td>${r.todayLT.toFixed(1)}d</td></tr>`).join('') +
                     `</tbody></table></div>`;
             }
-
+ 
             document.getElementById('actionSection').innerHTML = html;
             buildTeamsSummary();
             document.getElementById('summarySection').classList.add('show');
             document.getElementById('actionSection').classList.add('show');
             document.getElementById('approvalSection').classList.add('show');
         }
-
+ 
         function updateTeamsSummary() {
             const today = new Date();
             const currentPeriod = getDiscountPeriod(today);
@@ -365,7 +364,7 @@
             const oos = reviewData.filter(r => r.severity === 'oos' && oosChecked.includes(r.sku));
             const oosUnchecked = reviewData.filter(r => r.severity === 'oos' && !oosChecked.includes(r.sku));
             const alerts = reviewData.filter(r => r.severity === 'alert');
-
+ 
             // Group by product name
             function groupByProduct(items) {
                 const grouped = {};
@@ -382,7 +381,7 @@
                 });
                 return grouped;
             }
-
+ 
             // Separate discounted vs non-discounted
             function categorizeByDiscount(items) {
                 const discounted = [];
@@ -398,13 +397,13 @@
                 
                 return { discounted, notDiscounted };
             }
-
+ 
             let summary = `📊 NL Lead Time Update — ${latestDateStr}`;
             if (currentPeriod) {
                 summary += ` | ${currentPeriod.currentName}`;
             }
             summary += `\n\n🔴 ${newlyOos.length} Newly OOS  🟡 ${oos.length} OOS  🟢 ${bis.length} BIS  ⚠️ ${alerts.length} Alerts`;
-
+ 
             // Newly OOS
             if (newlyOos.length > 0) {
                 const { discounted, notDiscounted } = categorizeByDiscount(newlyOos);
@@ -425,7 +424,7 @@
                     });
                 }
             }
-
+ 
             // OOS
             if (oos.length > 0) {
                 const { discounted, notDiscounted } = categorizeByDiscount(oos);
@@ -446,7 +445,7 @@
                     });
                 }
             }
-
+ 
             // BIS
             if (bis.length > 0) {
                 summary += `\n\n✅ BACK IN STOCK TODAY:`;
@@ -455,7 +454,7 @@
                     summary += `\n• ${product}:\n  ${sizes.map(s => `* ${s.size} (${s.lt}d)`).join('\n  ')}`;
                 });
             }
-
+ 
             // Strategic Holds (unchecked OOS items)
             if (oosUnchecked.length > 0) {
                 summary += `\n\n🔶 STRATEGIC HOLD (not putting OOS):`;
@@ -464,7 +463,7 @@
                     summary += `\n• ${product}:\n  ${sizes.map(s => `* ${s.size} (${s.lt}d vs 30d threshold)`).join('\n  ')}`;
                 });
             }
-
+ 
             // Alerts
             if (alerts.length > 0) {
                 const { discounted, notDiscounted } = categorizeByDiscount(alerts);
@@ -485,39 +484,39 @@
                     });
                 }
             }
-
+ 
             document.getElementById('teamsSummary').value = summary;
         }
-
+ 
         function buildTeamsSummary() {
             updateTeamsSummary();
         }
-
+ 
         function generateJira() {
             const newlyOosSelected = Array.from(document.querySelectorAll('.newly-oos-item:checked')).map(el => el.value);
             const newlyOos = reviewData.filter(r => r.severity === 'newly-oos' && newlyOosSelected.includes(r.sku));
             const bis = reviewData.filter(r => r.severity === 'bis');
-
+ 
             let jira = `[NL] Daily Lead Time Review - ${latestDateStr}
-
+ 
 *Summary:*
 • ⚡ Newly OOS (crossed today): ${newlyOos.length}
 • ✓ Back In Stock Today: ${bis.length}
-
+ 
 `;
-
+ 
             if (newlyOos.length > 0) {
                 jira += `*⚡ Newly Out of Stock (Crossed TODAY):*\n` + newlyOos.map(r => `• ${r.sku} - ${r.skuName} (LT: ${r.todayLT.toFixed(1)}d)`).join('\n') + '\n\n';
             }
-
+ 
             if (bis.length > 0) {
                 jira += `*✓ Back In Stock Today:*\n` + bis.map(r => `• ${r.sku} - ${r.skuName} (LT: ${r.todayLT.toFixed(1)}d)`).join('\n') + '\n\n';
             }
-
+ 
             document.getElementById('jiraText').value = jira;
             document.getElementById('jiraSection').classList.add('show');
         }
-
+ 
         function excelDateToJSDate(excelDate) {
             // Excel serial date: days since 1900-01-01 (with 1900 leap year bug)
             // 1 = 1900-01-01, 60 = 1900-02-29 (bug), etc.
@@ -525,13 +524,13 @@
             const jsDate = new Date(excelEpoch.getTime() + (excelDate - 2) * 86400000);
             return jsDate;
         }
-
+ 
         function updateHistory() {
             if (!historyWorkbook) {
                 alert('Please upload historical file first');
                 return;
             }
-
+ 
             try {
                 const sheetName = historyWorkbook.SheetNames[0];
                 const worksheet = historyWorkbook.Sheets[sheetName];
@@ -563,19 +562,19 @@
                         }
                     }
                 }
-
+ 
                 if (!todayCol) {
                     alert(`Today's date (${todayStr}) not found in historical file.\n\nMake sure the file has today's date as a column header.`);
                     return;
                 }
-
+ 
                 const newlyOosChecked = Array.from(document.querySelectorAll('.newly-oos-item:checked')).map(el => el.value);
                 const oosChecked = Array.from(document.querySelectorAll('.oos-item:checked')).map(el => el.value);
                 const bisSelected = reviewData.filter(r => r.severity === 'bis');
-
+ 
                 const newlyOos = reviewData.filter(r => r.severity === 'newly-oos' && newlyOosChecked.includes(r.sku));
                 const oos = reviewData.filter(r => r.severity === 'oos' && oosChecked.includes(r.sku));
-
+ 
                 // Update values
                 const range = XLSX.utils.decode_range(worksheet['!ref']);
                 for (let row = 2; row <= range.e.r + 1; row++) {
@@ -592,7 +591,7 @@
                         worksheet[cell] = { v: 0, t: 'n' };
                     }
                 }
-
+ 
                 // Download with today's date
                 const wbout = XLSX.write(historyWorkbook, { bookType: 'xlsx', type: 'array' });
                 const blob = new Blob([wbout], { type: 'application/octet-stream' });
@@ -604,20 +603,20 @@
                 link.click();
                 document.body.removeChild(link);
                 URL.revokeObjectURL(url);
-
+ 
                 alert('✓ Historical file updated for ' + todayStr + ' and downloaded!');
             } catch (err) {
                 alert('Error: ' + err.message);
                 console.error(err);
             }
         }
-
+ 
         function copyText(id) {
             document.getElementById(id).select();
             document.execCommand('copy');
             alert('✓ Copied!');
         }
-
+ 
         function reset() {
             location.reload();
         }
