@@ -92,7 +92,7 @@
             { name: 'Spring Sales', periodA: false, start: [2, 18], end: [3, 30] },
             { name: 'Easter Sales', periodA: true, start: [3, 31], end: [4, 30] },
             { name: 'Emma Comfort Weeks', periodA: false, start: [5, 1], end: [6, 29] },
-            { name: 'Summer Sales', periodA: true, start: [6, 30], end: [7, 31] },
+            { name: 'Summer Sales', periodA: true, start: [6, 30], end: [8, 31] },
             { name: 'Autumn Sales', periodA: false, start: [9, 1], end: [10, 19] },
             { name: 'Black Friday', periodA: true, start: [10, 20], end: [11, 30] },
             { name: 'Holiday Sales', periodA: false, start: [12, 1], end: [12, 27] }
@@ -123,7 +123,7 @@
 
         function isProductDiscounted(skuName, currentPeriod) {
             const skuData = thresholdMap[skuName];
-            if (!skuData || !skuData.period) return false;
+            if (!skuData || !skuData.period || !currentPeriod) return false;
             
             if (currentPeriod.periodA && skuData.period === 'A') return true;
             if (!currentPeriod.periodA && skuData.period === 'B') return true;
