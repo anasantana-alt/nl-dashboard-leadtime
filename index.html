@@ -253,24 +253,47 @@
                     const skuMap = {};
                     for (let i = 2; i < lines.length; i++) {
                         const parts = lines[i].split(delimiter);
-                        if (parts[0].trim() === 'NL' && parts[1].trim() in thresholdMap && parts[2].includes('Calculated Days Total Lead Time To')) {
-                            const sku = parts[1].trim();
-                            const todayIdx = headers.indexOf(latestDateStr);
-                            const lastWorkingIdx = headers.indexOf(lastWorkingDayStr);
-                            
-                            if (todayIdx === -1 || lastWorkingIdx === -1) {
-                                console.warn(`Could not find date indices for ${sku}`);
-                                continue;
-                            }
-                            
-                            skuMap[sku] = {
-                                sku,
-                                skuName: thresholdMap[sku].name,
-                                todayLT: parseFloat(parts[todayIdx]) || 0,
-                                yesterdayLT: parseFloat(parts[lastWorkingIdx]) || 0,
-                                thresholds: thresholdMap[sku]
-                            };
+                        
+                        // Skip if not enough columns
+                        if (parts.length < 3) continue;
+                        
+                        const country = parts[0].trim();
+                        const sku = parts[1].trim();
+                        const metric = parts[2].trim();
+                        
+                        // Only process NL country
+                        if (country !== 'NL') continue;
+                        
+                        // Skip Grand Total rows
+                        if (sku.includes('Grand Total') || country.includes('Grand Total')) continue;
+                        
+                        // Only process "Calculated Days Total Lead Time To" metric
+                        if (!metric.includes('Calculated Days Total Lead Time To')) continue;
+                        
+                        // Skip if SKU not in threshold map
+                        if (!(sku in thresholdMap)) continue;
+                        
+                        const todayIdx = headers.indexOf(latestDateStr);
+                        const lastWorkingIdx = headers.indexOf(lastWorkingDayStr);
+                        
+                        if (todayIdx === -1 || lastWorkingIdx === -1) {
+                            console.warn(`Could not find date indices for ${sku}`);
+                            continue;
                         }
+                        
+                        const todayValue = parseFloat(parts[todayIdx]);
+                        const yesterdayValue = parseFloat(parts[lastWorkingIdx]);
+                        
+                        // Skip if values are not valid numbers
+                        if (isNaN(todayValue) || isNaN(yesterdayValue)) continue;
+                        
+                        skuMap[sku] = {
+                            sku,
+                            skuName: thresholdMap[sku].name,
+                            todayLT: todayValue,
+                            yesterdayLT: yesterdayValue,
+                            thresholds: thresholdMap[sku]
+                        };
                     }
 
                     allData = Object.values(skuMap);
