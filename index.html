@@ -220,15 +220,44 @@
                     const lines = csv.split(/\r?\n/).filter(l => l.trim());
                     const delimiter = lines[0].includes('\t') ? '\t' : ',';
                     const headers = lines[1].split(delimiter);
-                    const dateColumns = headers.slice(3).filter(h => /\d{4}-\d{2}-\d{2}/.test(h));
+                    const timestamps = lines[2].split(delimiter);
                     
-                    if (dateColumns.length < 2) {
-                        alert('Could not find date columns. Make sure you exported from Tableau with date columns.');
+                    // Get all dates and find latest timestamp for each day
+                    const dateTimestampMap = {}; // { '2026-08-03': { colIndex: 5, timestamp: '8/3/2026 10:10:23 AM' } }
+                    const dateColumns = [];
+                    
+                    for (let i = 3; i < headers.length; i++) {
+                        const date = headers[i];
+                        const timestamp = timestamps[i];
+                        
+                        // Check if it's a valid date (format: YYYY-MM-DD)
+                        if (date && /\d{4}-\d{2}-\d{2}/.test(date)) {
+                            if (!dateTimestampMap[date]) {
+                                dateTimestampMap[date] = { colIndex: i, timestamp: timestamp, date: date };
+                                dateColumns.push(date);
+                            } else {
+                                // Compare timestamps - keep the later one
+                                const existing = new Date(`${dateTimestampMap[date].date} ${dateTimestampMap[date].timestamp}`);
+                                const current = new Date(`${date} ${timestamp}`);
+                                
+                                if (current > existing) {
+                                    dateTimestampMap[date] = { colIndex: i, timestamp: timestamp, date: date };
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Get unique dates in order
+                    const uniqueDateColumns = Array.from(new Set(dateColumns));
+                    const latestColIndices = uniqueDateColumns.map(d => dateTimestampMap[d].colIndex);
+                    
+                    if (latestColIndices.length < 2) {
+                        alert('Could not find enough date columns with valid timestamps.');
                         return;
                     }
                     
-                    latestDateStr = dateColumns[dateColumns.length - 1];
-                    previousDateStr = dateColumns[dateColumns.length - 2];
+                    latestDateStr = uniqueDateColumns[uniqueDateColumns.length - 1];
+                    const previousDateStr = uniqueDateColumns[uniqueDateColumns.length - 2];
                     
                     // Smart weekend detection: only on Monday (compare Fri → Mon)
                     const today = new Date();
@@ -238,10 +267,10 @@
                     
                     // Only if today is Monday, look for last Friday
                     if (todayDayOfWeek === 1) { // Monday only
-                        for (let i = dateColumns.length - 1; i >= 0; i--) {
-                            const date = new Date(dateColumns[i]);
+                        for (let i = uniqueDateColumns.length - 1; i >= 0; i--) {
+                            const date = new Date(uniqueDateColumns[i]);
                             if (date.getDay() === 5) { // Friday = 5
-                                lastWorkingDayStr = dateColumns[i];
+                                lastWorkingDayStr = uniqueDateColumns[i];
                                 console.log('✓ Monday detected - comparing to last Friday:', lastWorkingDayStr);
                                 break;
                             }
@@ -249,9 +278,11 @@
                     }
                     
                     console.log(`Comparing: ${lastWorkingDayStr} → ${latestDateStr}`);
+                    const todayIdx = latestColIndices[latestColIndices.length - 1];
+                    const lastWorkingIdx = latestColIndices[uniqueDateColumns.indexOf(lastWorkingDayStr)];
 
                     const skuMap = {};
-                    for (let i = 2; i < lines.length; i++) {
+                    for (let i = 3; i < lines.length; i++) {
                         const parts = lines[i].split(delimiter);
                         
                         // Skip if not enough columns
@@ -272,14 +303,6 @@
                         
                         // Skip if SKU not in threshold map
                         if (!(sku in thresholdMap)) continue;
-                        
-                        const todayIdx = headers.indexOf(latestDateStr);
-                        const lastWorkingIdx = headers.indexOf(lastWorkingDayStr);
-                        
-                        if (todayIdx === -1 || lastWorkingIdx === -1) {
-                            console.warn(`Could not find date indices for ${sku}`);
-                            continue;
-                        }
                         
                         const todayValue = parseFloat(parts[todayIdx]);
                         const yesterdayValue = parseFloat(parts[lastWorkingIdx]);
