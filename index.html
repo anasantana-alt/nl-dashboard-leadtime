@@ -241,16 +241,20 @@
                             } else {
                                 // Compare timestamps - keep the later one
                                 const existingTime = dateTimestampMap[date].timestamp;
-                                const existing = new Date(`${date} ${existingTime}`);
-                                const current = new Date(`${date} ${timestamp}`);
+                                
+                                // Parse timestamps directly (they're already in valid format)
+                                const existing = new Date(existingTime);
+                                const current = new Date(timestamp);
                                 
                                 console.log(`  ${date}: Second at col ${i}, time: ${timestamp}`);
+                                console.log(`    Existing time: ${existingTime} = ${existing.getTime()}`);
+                                console.log(`    Current time:  ${timestamp} = ${current.getTime()}`);
                                 
-                                if (current > existing) {
-                                    console.log(`    → Keeping col ${i} (${timestamp} is later)`);
+                                if (current.getTime() > existing.getTime()) {
+                                    console.log(`    ✓ Keeping col ${i} (${timestamp} is LATER)`);
                                     dateTimestampMap[date] = { colIndex: i, timestamp: timestamp, date: date };
                                 } else {
-                                    console.log(`    → Keeping col ${dateTimestampMap[date].colIndex} (${existingTime} is later)`);
+                                    console.log(`    ✓ Keeping col ${dateTimestampMap[date].colIndex} (${existingTime} is LATER or SAME)`);
                                 }
                             }
                         }
