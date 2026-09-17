@@ -228,12 +228,22 @@
                     const dateColumns = [];
                     
                     console.log('Parsing timestamps...');
+                    let lastSeenDate = null;  // Track the last date we saw
+                    
                     for (let i = 3; i < headers.length; i++) {
-                        const date = headers[i] ? headers[i].trim() : '';
+                        let date = headers[i] ? headers[i].trim() : '';
                         const timestamp = timestamps[i] ? timestamps[i].trim() : '';
                         
-                        // Check if it's a valid date (format: YYYY-MM-DD)
+                        // If date is empty but timestamp exists, inherit from previous date
+                        if (!date && timestamp && lastSeenDate) {
+                            date = lastSeenDate;
+                            console.log(`  Col ${i}: Empty date, inheriting ${date} from previous`);
+                        }
+                        
+                        // Update last seen date if this one is valid
                         if (date && /\d{4}-\d{2}-\d{2}/.test(date)) {
+                            lastSeenDate = date;
+                            
                             if (!dateTimestampMap[date]) {
                                 dateTimestampMap[date] = { colIndex: i, timestamp: timestamp, date: date };
                                 dateColumns.push(date);
