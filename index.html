@@ -196,7 +196,7 @@
                     document.getElementById('statusDiv').innerHTML = `<div class="status error">Error: ${err.message}</div>`;
                 }
             };
-            reader.readAsText(file);
+            reader.readAsArrayBuffer(file);
         });
 
         document.getElementById('csvUpload').addEventListener('change', function(e) {
@@ -210,11 +210,26 @@
             const reader = new FileReader();
             reader.onload = function(event) {
                 try {
-                    let csv = event.target.result;
+                    // Handle UTF-16 encoded files properly
+                    const arrayBuffer = event.target.result;
+                    const view = new Uint8Array(arrayBuffer);
                     
-                    // Handle UTF-16 encoding (Tableau default)
-                    if (csv.charCodeAt(0) === 0xFEFF || csv.charCodeAt(0) === 0xFFFE) {
-                        csv = csv.slice(1);
+                    // Detect encoding
+                    let isUTF16LE = false;
+                    if (view[0] === 0xFF && view[1] === 0xFE) {
+                        isUTF16LE = true;
+                    } else if (view[0] === 0xFE && view[1] === 0xFF) {
+                        isUTF16LE = false; // UTF-16 BE
+                    }
+                    
+                    // Decode based on detected encoding
+                    let csv;
+                    if (isUTF16LE || (view[0] === 0xFF && view[1] === 0xFE)) {
+                        csv = new TextDecoder('utf-16le').decode(arrayBuffer.slice(2)); // Skip BOM
+                    } else if (view[0] === 0xFE && view[1] === 0xFF) {
+                        csv = new TextDecoder('utf-16be').decode(arrayBuffer.slice(2)); // Skip BOM
+                    } else {
+                        csv = new TextDecoder('utf-8').decode(arrayBuffer);
                     }
                     
                     const lines = csv.split(/\r?\n/).filter(l => l.trim());
@@ -226,6 +241,7 @@
                     const dateTimestampMap = {}; // { '2026-08-03': { colIndex: 5, timestamp: '8/3/2026 10:10:23 AM' } }
                     const dateColumns = [];
                     
+                    console.log('Parsing timestamps...');
                     for (let i = 3; i < headers.length; i++) {
                         const date = headers[i];
                         const timestamp = timestamps[i];
@@ -235,13 +251,21 @@
                             if (!dateTimestampMap[date]) {
                                 dateTimestampMap[date] = { colIndex: i, timestamp: timestamp, date: date };
                                 dateColumns.push(date);
+                                console.log(`  ${date}: First occurrence at col ${i}, time: ${timestamp}`);
                             } else {
                                 // Compare timestamps - keep the later one
-                                const existing = new Date(`${dateTimestampMap[date].date} ${dateTimestampMap[date].timestamp}`);
+                                const existingTime = dateTimestampMap[date].timestamp;
+                                const existing = new Date(`${date} ${existingTime}`);
                                 const current = new Date(`${date} ${timestamp}`);
                                 
+                                console.log(`  ${date}: Found second occurrence at col ${i}, time: ${timestamp}`);
+                                console.log(`    Existing: ${existingTime}, Current: ${timestamp}`);
+                                
                                 if (current > existing) {
+                                    console.log(`    → Keeping col ${i} (later timestamp)`);
                                     dateTimestampMap[date] = { colIndex: i, timestamp: timestamp, date: date };
+                                } else {
+                                    console.log(`    → Keeping col ${dateTimestampMap[date].colIndex} (earlier is already later)`);
                                 }
                             }
                         }
@@ -250,6 +274,9 @@
                     // Get unique dates in order
                     const uniqueDateColumns = Array.from(new Set(dateColumns));
                     const latestColIndices = uniqueDateColumns.map(d => dateTimestampMap[d].colIndex);
+                    
+                    console.log('Final column indices to use:', latestColIndices);
+                    console.log('Final dates:', uniqueDateColumns);
                     
                     if (latestColIndices.length < 2) {
                         alert('Could not find enough date columns with valid timestamps.');
@@ -277,9 +304,10 @@
                         }
                     }
                     
-                    console.log(`Comparing: ${lastWorkingDayStr} → ${latestDateStr}`);
-                    const todayIdx = latestColIndices[latestColIndices.length - 1];
-                    const lastWorkingIdx = latestColIndices[uniqueDateColumns.indexOf(lastWorkingDayStr)];
+                    const todayIdx = dateTimestampMap[latestDateStr].colIndex;
+                    const lastWorkingIdx = dateTimestampMap[lastWorkingDayStr].colIndex;
+                    
+                    console.log(`Comparing: ${lastWorkingDayStr} (col ${lastWorkingIdx}) → ${latestDateStr} (col ${todayIdx})`);
 
                     const skuMap = {};
                     for (let i = 3; i < lines.length; i++) {
