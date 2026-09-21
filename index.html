@@ -172,14 +172,54 @@
             const reader = new FileReader();
             reader.onload = function(event) {
                 try {
-                    const csv = event.target.result;
-                    const lines = csv.split('\n');
+                    let csv = event.target.result;
+                    
+                    // Handle if it's an ArrayBuffer (shouldn't be, but just in case)
+                    if (csv instanceof ArrayBuffer) {
+                        csv = new TextDecoder('utf-8').decode(csv);
+                    }
+                    
+                    // Remove BOM if present
+                    if (csv.charCodeAt(0) === 0xFEFF) {
+                        csv = csv.slice(1);
+                    }
+                    
+                    // Remove quotes around the entire CSV if they exist
+                    csv = csv.replace(/^"(.*)"\n/, '$1\n');
+                    
+                    const lines = csv.split(/\r?\n/).filter(l => l.trim());
                     thresholdMap = {};
+                    
                     for (let i = 1; i < lines.length; i++) {
-                        const parts = lines[i].split(',').map(s => s.trim());
+                        let line = lines[i].trim();
+                        
+                        // Remove outer quotes if the line is quoted
+                        if (line.startsWith('"') && line.endsWith('"')) {
+                            line = line.slice(1, -1);
+                        }
+                        
+                        // Parse CSV carefully (handle quoted fields)
+                        const parts = [];
+                        let current = '';
+                        let inQuotes = false;
+                        
+                        for (let j = 0; j < line.length; j++) {
+                            const char = line[j];
+                            if (char === '"') {
+                                inQuotes = !inQuotes;
+                            } else if (char === ',' && !inQuotes) {
+                                parts.push(current.trim().replace(/^"|"$/g, ''));
+                                current = '';
+                            } else {
+                                current += char;
+                            }
+                        }
+                        parts.push(current.trim().replace(/^"|"$/g, ''));
+                        
                         const name = parts[0];
                         const sku = parts[1];
                         const period = parts[parts.length - 1]; // Last column
+                        
                         if (sku && name) {
                             thresholdMap[sku] = { 
                                 name, 
@@ -196,7 +236,7 @@
                     document.getElementById('statusDiv').innerHTML = `<div class="status error">Error: ${err.message}</div>`;
                 }
             };
-            reader.readAsArrayBuffer(file);
+            reader.readAsText(file);
         });
 
         document.getElementById('csvUpload').addEventListener('change', function(e) {
