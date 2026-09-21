@@ -643,6 +643,10 @@
                 
                 // Find today's date column in the historical file
                 let todayCol = null;
+                console.log(`\n=== SEARCHING FOR TODAY'S DATE: ${todayStr} ===`);
+                console.log(`Today object: ${today.toISOString()}`);
+                console.log(`Year: ${today.getFullYear()}, Month: ${today.getMonth()}, Date: ${today.getDate()}\n`);
+                
                 for (let col = 3; col <= 300; col++) {
                     const colLetter = XLSX.utils.encode_col(col - 1);
                     const cell = worksheet[colLetter + '1'];
@@ -650,31 +654,42 @@
                     
                     let header = cell.v;
                     let headerDate = null;
+                    let headerType = typeof header;
+                    
+                    console.log(`Col ${colLetter} (col#${col}): type=${headerType}, value="${header}"`);
                     
                     if (typeof header === 'number') {
                         // Excel serial number
                         headerDate = excelDateToJSDate(header);
-                        console.log(`Col ${colLetter}: Number → ${headerDate.toISOString()}`);
+                        console.log(`  → Number ${header} converted to: ${headerDate.toISOString()}`);
+                        console.log(`  → Checking: ${headerDate.getFullYear()}/${headerDate.getMonth()}/${headerDate.getDate()} vs ${today.getFullYear()}/${today.getMonth()}/${today.getDate()}`);
                     } else if (header instanceof Date) {
                         // Already a Date object
                         headerDate = header;
-                        console.log(`Col ${colLetter}: Date → ${headerDate.toISOString()}`);
+                        console.log(`  → Date object: ${headerDate.toISOString()}`);
+                        console.log(`  → Checking: ${headerDate.getFullYear()}/${headerDate.getMonth()}/${headerDate.getDate()} vs ${today.getFullYear()}/${today.getMonth()}/${today.getDate()}`);
                     } else if (typeof header === 'string' && header.includes('2026')) {
                         // String like "2026-09-21 00:00:00"
                         const datePart = header.split(' ')[0];  // Get just the date part
                         headerDate = new Date(datePart + 'T00:00:00Z');
-                        console.log(`Col ${colLetter}: String "${header}" → ${headerDate.toISOString()}`);
+                        console.log(`  → String "${header}" → date part: "${datePart}" → ${headerDate.toISOString()}`);
+                        console.log(`  → Checking: ${headerDate.getFullYear()}/${headerDate.getMonth()}/${headerDate.getDate()} vs ${today.getFullYear()}/${today.getMonth()}/${today.getDate()}`);
                     }
                     
                     // Compare dates
                     if (headerDate instanceof Date && !isNaN(headerDate.getTime())) {
-                        if (headerDate.getFullYear() === today.getFullYear() &&
-                            headerDate.getMonth() === today.getMonth() &&
-                            headerDate.getDate() === today.getDate()) {
+                        const yearMatch = headerDate.getFullYear() === today.getFullYear();
+                        const monthMatch = headerDate.getMonth() === today.getMonth();
+                        const dateMatch = headerDate.getDate() === today.getDate();
+                        console.log(`  → Year match: ${yearMatch}, Month match: ${monthMatch}, Date match: ${dateMatch}`);
+                        
+                        if (yearMatch && monthMatch && dateMatch) {
                             todayCol = colLetter;
-                            console.log(`✓ Found today's column: ${todayCol} for date: ${todayStr}`);
+                            console.log(`\n✓✓✓ FOUND TODAY'S COLUMN: ${todayCol} ✓✓✓\n`);
                             break;
                         }
+                    } else if (headerDate) {
+                        console.log(`  → Invalid date object`);
                     }
                 }
 
