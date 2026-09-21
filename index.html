@@ -620,8 +620,8 @@
 
         function excelDateToJSDate(excelDate) {
             // Excel serial date: days since 1900-01-01 (with 1900 leap year bug)
-            // 1 = 1900-01-01, 60 = 1900-02-29 (bug), etc.
-            const excelEpoch = new Date(1900, 0, 1);
+            // Convert to UTC to avoid timezone issues
+            const excelEpoch = new Date(Date.UTC(1900, 0, 1));
             const jsDate = new Date(excelEpoch.getTime() + (excelDate - 2) * 86400000);
             return jsDate;
         }
@@ -676,14 +676,19 @@
                         console.log(`  → Checking: ${headerDate.getFullYear()}/${headerDate.getMonth()}/${headerDate.getDate()} vs ${today.getFullYear()}/${today.getMonth()}/${today.getDate()}`);
                     }
                     
-                    // Compare dates
+                    // Compare dates using UTC to avoid timezone issues
                     if (headerDate instanceof Date && !isNaN(headerDate.getTime())) {
-                        const yearMatch = headerDate.getFullYear() === today.getFullYear();
-                        const monthMatch = headerDate.getMonth() === today.getMonth();
-                        const dateMatch = headerDate.getDate() === today.getDate();
-                        console.log(`  → Year match: ${yearMatch}, Month match: ${monthMatch}, Date match: ${dateMatch}`);
+                        const headerUTC = new Date(Date.UTC(headerDate.getUTCFullYear(), headerDate.getUTCMonth(), headerDate.getUTCDate()));
+                        const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
                         
-                        if (yearMatch && monthMatch && dateMatch) {
+                        const headerYearMatch = headerUTC.getUTCFullYear() === todayUTC.getUTCFullYear();
+                        const headerMonthMatch = headerUTC.getUTCMonth() === todayUTC.getUTCMonth();
+                        const headerDateMatch = headerUTC.getUTCDate() === todayUTC.getUTCDate();
+                        
+                        console.log(`  → UTC Comparison - Year: ${headerYearMatch}, Month: ${headerMonthMatch}, Date: ${headerDateMatch}`);
+                        console.log(`  → Header UTC: ${headerUTC.toISOString()}, Today UTC: ${todayUTC.toISOString()}`);
+                        
+                        if (headerYearMatch && headerMonthMatch && headerDateMatch) {
                             todayCol = colLetter;
                             console.log(`\n✓✓✓ FOUND TODAY'S COLUMN: ${todayCol} ✓✓✓\n`);
                             break;
