@@ -707,15 +707,37 @@
                 // Search for the column with today's serial number
                 if (!todayCol) {
                     console.log(`Searching for column with serial ${todayExcelSerial}...`);
+                    let searchCount = 0;
                     for (let col = 3; col <= 500; col++) {
                         const colLetter = XLSX.utils.encode_col(col - 1);
                         const cell = worksheet[colLetter + '1'];
-                        if (cell && cell.v === todayExcelSerial) {
-                            todayCol = colLetter;
-                            console.log(`✓✓✓ FOUND TODAY'S COLUMN: ${todayCol} with value ${cell.v} ✓✓✓`);
-                            break;
+                        
+                        if (cell) {
+                            searchCount++;
+                            const cellValue = cell.v;
+                            const cellType = typeof cellValue;
+                            
+                            // Log every 10th column to avoid spam
+                            if (searchCount % 10 === 0) {
+                                console.log(`  Checked col ${colLetter}: value=${cellValue}, type=${cellType}`);
+                            }
+                            
+                            // Check for exact match
+                            if (cellValue === todayExcelSerial) {
+                                todayCol = colLetter;
+                                console.log(`✓✓✓ FOUND TODAY'S COLUMN: ${todayCol} with value ${cellValue} ✓✓✓`);
+                                break;
+                            }
+                            
+                            // Also check if it's close (within 1 - might be a rounding issue)
+                            if (typeof cellValue === 'number' && Math.abs(cellValue - todayExcelSerial) < 1) {
+                                console.log(`  ⚠️ Found close match at ${colLetter}: ${cellValue} (wanted ${todayExcelSerial})`);
+                            }
                         }
+                        
+                        if (searchCount > 220) break;  // Stop after checking about 220 columns
                     }
+                    console.log(`Checked ${searchCount} columns total`);
                 }
                 
                 if (!todayCol) {
