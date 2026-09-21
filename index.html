@@ -698,10 +698,32 @@
                     }
                 }
 
+                // Calculate what today's Excel serial number should be (using UTC)
+                const excelEpoch = new Date(Date.UTC(1900, 0, 1));
+                const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+                const todayExcelSerial = Math.floor((todayUTC - excelEpoch) / 86400000) + 2;
+                console.log(`\nToday (${todayStr}) should have Excel serial: ${todayExcelSerial}`);
+                
+                // Search for the column with today's serial number
                 if (!todayCol) {
-                    alert(`Today's date (${todayStr}) not found in historical file.\n\nMake sure the file has today's date as a column header.`);
+                    console.log(`Searching for column with serial ${todayExcelSerial}...`);
+                    for (let col = 3; col <= 500; col++) {
+                        const colLetter = XLSX.utils.encode_col(col - 1);
+                        const cell = worksheet[colLetter + '1'];
+                        if (cell && cell.v === todayExcelSerial) {
+                            todayCol = colLetter;
+                            console.log(`✓✓✓ FOUND TODAY'S COLUMN: ${todayCol} with value ${cell.v} ✓✓✓`);
+                            break;
+                        }
+                    }
+                }
+                
+                if (!todayCol) {
+                    alert(`Could not find column for today (${todayStr}, serial ${todayExcelSerial}) in the file.\n\nMake sure the file has columns for every day through the end of the year.`);
                     return;
                 }
+                
+                console.log(`\n✓ Updating column ${todayCol} with today's OOS/BIS data\n`);
 
                 const newlyOosChecked = Array.from(document.querySelectorAll('.newly-oos-item:checked')).map(el => el.value);
                 const oosChecked = Array.from(document.querySelectorAll('.oos-item:checked')).map(el => el.value);
