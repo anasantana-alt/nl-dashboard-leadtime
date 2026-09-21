@@ -649,16 +649,30 @@
                     if (!cell || !cell.v) break;
                     
                     let header = cell.v;
+                    let headerDate = null;
+                    
                     if (typeof header === 'number') {
-                        header = excelDateToJSDate(header);
+                        // Excel serial number
+                        headerDate = excelDateToJSDate(header);
+                        console.log(`Col ${colLetter}: Number → ${headerDate.toISOString()}`);
+                    } else if (header instanceof Date) {
+                        // Already a Date object
+                        headerDate = header;
+                        console.log(`Col ${colLetter}: Date → ${headerDate.toISOString()}`);
+                    } else if (typeof header === 'string' && header.includes('2026')) {
+                        // String like "2026-09-21 00:00:00"
+                        const datePart = header.split(' ')[0];  // Get just the date part
+                        headerDate = new Date(datePart + 'T00:00:00Z');
+                        console.log(`Col ${colLetter}: String "${header}" → ${headerDate.toISOString()}`);
                     }
                     
-                    if (header instanceof Date) {
-                        if (header.getFullYear() === today.getFullYear() &&
-                            header.getMonth() === today.getMonth() &&
-                            header.getDate() === today.getDate()) {
+                    // Compare dates
+                    if (headerDate instanceof Date && !isNaN(headerDate.getTime())) {
+                        if (headerDate.getFullYear() === today.getFullYear() &&
+                            headerDate.getMonth() === today.getMonth() &&
+                            headerDate.getDate() === today.getDate()) {
                             todayCol = colLetter;
-                            console.log('✓ Found today\'s column:', todayCol, 'for date:', todayStr);
+                            console.log(`✓ Found today's column: ${todayCol} for date: ${todayStr}`);
                             break;
                         }
                     }
