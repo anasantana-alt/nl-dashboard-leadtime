@@ -3,7 +3,6 @@
 <head>
     <title>NL Lead Time Review Dashboard</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8f9fa; padding: 20px; }
@@ -32,7 +31,7 @@
         <h1>📊 NL Lead Time Review Dashboard</h1>
         
         <div class="section" style="display: block;">
-            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                 <div class="upload-field">
                     <label><strong>Upload Threshold CSV</strong></label>
                     <input type="file" id="thresholdUpload" accept=".csv">
@@ -40,10 +39,6 @@
                 <div class="upload-field">
                     <label><strong>Upload Lead Time CSV</strong></label>
                     <input type="file" id="csvUpload" accept=".csv">
-                </div>
-                <div class="upload-field">
-                    <label><strong>Upload Historical File (XLSX)</strong></label>
-                    <input type="file" id="historyUpload" accept=".xlsx">
                 </div>
             </div>
             <div id="statusDiv"></div>
@@ -74,7 +69,7 @@
 
         <div id="approvalSection" class="section">
             <button onclick="generateJira()" style="background: #dcfce7; color: #059669;">Approve & Generate Jira</button>
-            <button onclick="updateHistory()" style="background: #dbeafe; color: #0284c7;">Update & Download History</button>
+            <button onclick="updateHistory()" style="background: #dbeafe; color: #0284c7;">Update & Download History (CSV)</button>
             <button onclick="reset()" style="background: #f3f4f6;">Clear</button>
         </div>
 
@@ -86,6 +81,12 @@
     </div>
 
     <script>
+        let thresholdMap = {};
+        let allData = [];
+        let reviewData = [];
+        let latestDateStr = '';
+        let csvOosStatus = {};    // { sku: { name, days: { 'YYYY-MM-DD': 1 or 0 } } } built from the lead time CSV
+
         // Discount periods (hardcoded)
         const discountPeriods = [
             { name: 'Winter Sales', periodA: true, start: [1, 2], end: [2, 17] },
@@ -345,6 +346,7 @@
                     console.log(`✓ Using columns: ${lastWorkingDayStr} (${dateTimestampMap[lastWorkingDayStr].timestamp}) col ${lastWorkingIdx} → ${latestDateStr} (${dateTimestampMap[latestDateStr].timestamp}) col ${todayIdx}`);
 
                     const skuMap = {};
+                    csvOosStatus = {};
                     for (let i = 3; i < lines.length; i++) {
                         const parts = lines[i].split(delimiter);
                         
@@ -367,6 +369,13 @@
                         // Skip if SKU not in threshold map
                         if (!(sku in thresholdMap)) continue;
                         
+                        // Save OOS status (1 = OOS, 0 = in stock) for every date in the CSV
+                        csvOosStatus[sku] = { name: thresholdMap[sku].name, days: {} };
+                        for (const d of uniqueDateColumns) {
+                            const v = parseFloat(parts[dateTimestampMap[d].colIndex]);
+                            if (!isNaN(v)) csvOosStatus[sku].days[d] = v > 30 ? 1 : 0;
+                        }
+
                         const todayValue = parseFloat(parts[todayIdx]);
                         const yesterdayValue = parseFloat(parts[lastWorkingIdx]);
                         
@@ -393,20 +402,10 @@
             reader.readAsText(file);
         });
 
-        document.getElementById('historyUpload').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (!file || typeof XLSX === 'undefined') return;
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                try {
-                    historyWorkbook = XLSX.read(event.target.result, { type: 'array' });
-                    document.getElementById('statusDiv').innerHTML = `<div class="status success">✓ Historical file loaded</div>`;
-                } catch (err) {
-                    document.getElementById('statusDiv').innerHTML = `<div class="status error">Error: ${err.message}</div>`;
-                }
-            };
-            reader.readAsText(file);
-        });
+        function csvCell(v) {
+            const s = v === undefined || v === null ? '' : String(v);
+            return /[",;\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+        }
 
         function analyzeData() {
             reviewData = allData.map(item => {
@@ -658,172 +657,66 @@
             document.getElementById('jiraSection').classList.add('show');
         }
 
-        function excelDateToJSDate(excelDate) {
-            // Excel serial date: days since 1900-01-01 (with 1900 leap year bug)
-            // Convert to UTC to avoid timezone issues
-            const excelEpoch = new Date(Date.UTC(1900, 0, 1));
-            const jsDate = new Date(excelEpoch.getTime() + (excelDate - 2) * 86400000);
-            return jsDate;
-        }
-
         function updateHistory() {
-            if (!historyWorkbook) {
-                alert('Please upload historical file first');
+            if (Object.keys(csvOosStatus).length === 0) {
+                alert('Please upload the lead time CSV first');
                 return;
             }
-
             try {
-                const sheetName = historyWorkbook.SheetNames[0];
-                const worksheet = historyWorkbook.Sheets[sheetName];
-                
-                // Use TODAY's date (system date), not the CSV date
-                const today = new Date();
-                const todayStr = today.toISOString().split('T')[0];
-                console.log('Updating for today (system date):', todayStr);
-                
-                // Find today's date column in the historical file
-                let todayCol = null;
-                console.log(`\n=== SEARCHING FOR TODAY'S DATE: ${todayStr} ===`);
-                console.log(`Today object: ${today.toISOString()}`);
-                console.log(`Year: ${today.getFullYear()}, Month: ${today.getMonth()}, Date: ${today.getDate()}\n`);
-                
-                for (let col = 3; col <= 300; col++) {
-                    const colLetter = XLSX.utils.encode_col(col - 1);
-                    const cell = worksheet[colLetter + '1'];
-                    if (!cell || !cell.v) break;
-                    
-                    let header = cell.v;
-                    let headerDate = null;
-                    let headerType = typeof header;
-                    
-                    console.log(`Col ${colLetter} (col#${col}): type=${headerType}, value="${header}"`);
-                    
-                    if (typeof header === 'number') {
-                        // Excel serial number
-                        headerDate = excelDateToJSDate(header);
-                        console.log(`  → Number ${header} converted to: ${headerDate.toISOString()}`);
-                        console.log(`  → Checking: ${headerDate.getFullYear()}/${headerDate.getMonth()}/${headerDate.getDate()} vs ${today.getFullYear()}/${today.getMonth()}/${today.getDate()}`);
-                    } else if (header instanceof Date) {
-                        // Already a Date object
-                        headerDate = header;
-                        console.log(`  → Date object: ${headerDate.toISOString()}`);
-                        console.log(`  → Checking: ${headerDate.getFullYear()}/${headerDate.getMonth()}/${headerDate.getDate()} vs ${today.getFullYear()}/${today.getMonth()}/${today.getDate()}`);
-                    } else if (typeof header === 'string' && header.includes('2026')) {
-                        // String like "2026-09-21 00:00:00"
-                        const datePart = header.split(' ')[0];  // Get just the date part
-                        headerDate = new Date(datePart + 'T00:00:00Z');
-                        console.log(`  → String "${header}" → date part: "${datePart}" → ${headerDate.toISOString()}`);
-                        console.log(`  → Checking: ${headerDate.getFullYear()}/${headerDate.getMonth()}/${headerDate.getDate()} vs ${today.getFullYear()}/${today.getMonth()}/${today.getDate()}`);
-                    }
-                    
-                    // Compare dates using UTC to avoid timezone issues
-                    if (headerDate instanceof Date && !isNaN(headerDate.getTime())) {
-                        const headerUTC = new Date(Date.UTC(headerDate.getUTCFullYear(), headerDate.getUTCMonth(), headerDate.getUTCDate()));
-                        const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-                        
-                        const headerYearMatch = headerUTC.getUTCFullYear() === todayUTC.getUTCFullYear();
-                        const headerMonthMatch = headerUTC.getUTCMonth() === todayUTC.getUTCMonth();
-                        const headerDateMatch = headerUTC.getUTCDate() === todayUTC.getUTCDate();
-                        
-                        console.log(`  → UTC Comparison - Year: ${headerYearMatch}, Month: ${headerMonthMatch}, Date: ${headerDateMatch}`);
-                        console.log(`  → Header UTC: ${headerUTC.toISOString()}, Today UTC: ${todayUTC.toISOString()}`);
-                        
-                        if (headerYearMatch && headerMonthMatch && headerDateMatch) {
-                            todayCol = colLetter;
-                            console.log(`\n✓✓✓ FOUND TODAY'S COLUMN: ${todayCol} ✓✓✓\n`);
-                            break;
+                const merged = csvOosStatus;
+
+                const allDates = new Set();
+                Object.values(merged).forEach(h => Object.keys(h.days).forEach(d => allDates.add(d)));
+                const dates = Array.from(allDates).sort();
+                const lastDate = dates[dates.length - 1];
+                const dayDiff = (a, b) => Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 86400000);
+
+                const rows = Object.entries(merged).map(([sku, h]) => {
+                    const known = dates.filter(d => h.days[d] !== undefined);
+                    const last = known[known.length - 1];
+                    let status = '', since = '', daysOos = '';
+                    if (last === undefined || dayDiff(last, lastDate) > 3) {
+                        status = 'No recent data';
+                    } else {
+                        const cur = h.days[last];
+                        // walk back to find when the current status started
+                        let k = known.length - 1;
+                        while (k > 0 && h.days[known[k - 1]] === cur) k--;
+                        since = known[k];
+                        if (cur === 1) {
+                            status = 'OOS';
+                            daysOos = dayDiff(since, last) + 1;
+                            if (k === 0) since = '<= ' + since;   // OOS since before first date in file
+                        } else {
+                            status = 'In stock';
+                            // BIS = in stock now, but was OOS before
+                            if (k > 0 && dayDiff(since, last) <= 7) status = 'BIS (last 7 days)';
+                            since = '';
                         }
-                    } else if (headerDate) {
-                        console.log(`  → Invalid date object`);
                     }
-                }
+                    return { sku, name: h.name, status, since, daysOos, days: h.days };
+                });
 
-                // Calculate what today's Excel serial number should be (using UTC)
-                const excelEpoch = new Date(Date.UTC(1900, 0, 1));
-                const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
-                const todayExcelSerial = Math.floor((todayUTC - excelEpoch) / 86400000) + 2;
-                console.log(`\nToday (${todayStr}) should have Excel serial: ${todayExcelSerial}`);
-                
-                // Search for the column with today's serial number
-                if (!todayCol) {
-                    console.log(`Searching for column with serial ${todayExcelSerial}...`);
-                    let searchCount = 0;
-                    for (let col = 3; col <= 500; col++) {
-                        const colLetter = XLSX.utils.encode_col(col - 1);
-                        const cell = worksheet[colLetter + '1'];
-                        
-                        if (cell) {
-                            searchCount++;
-                            const cellValue = cell.v;
-                            const cellType = typeof cellValue;
-                            
-                            // Log every 10th column to avoid spam
-                            if (searchCount % 10 === 0) {
-                                console.log(`  Checked col ${colLetter}: value=${cellValue}, type=${cellType}`);
-                            }
-                            
-                            // Check for exact match
-                            if (cellValue === todayExcelSerial) {
-                                todayCol = colLetter;
-                                console.log(`✓✓✓ FOUND TODAY'S COLUMN: ${todayCol} with value ${cellValue} ✓✓✓`);
-                                break;
-                            }
-                            
-                            // Also check if it's close (within 1 - might be a rounding issue)
-                            if (typeof cellValue === 'number' && Math.abs(cellValue - todayExcelSerial) < 1) {
-                                console.log(`  ⚠️ Found close match at ${colLetter}: ${cellValue} (wanted ${todayExcelSerial})`);
-                            }
-                        }
-                        
-                        if (searchCount > 220) break;  // Stop after checking about 220 columns
-                    }
-                    console.log(`Checked ${searchCount} columns total`);
-                }
-                
-                if (!todayCol) {
-                    alert(`Could not find column for today (${todayStr}, serial ${todayExcelSerial}) in the file.\n\nMake sure the file has columns for every day through the end of the year.`);
-                    return;
-                }
-                
-                console.log(`\n✓ Updating column ${todayCol} with today's OOS/BIS data\n`);
+                // OOS first (longest first), then BIS, then in stock
+                const order = s => s === 'OOS' ? 0 : s.startsWith('BIS') ? 1 : s === 'In stock' ? 2 : 3;
+                rows.sort((a, b) => order(a.status) - order(b.status) || (b.daysOos || 0) - (a.daysOos || 0) || a.sku.localeCompare(b.sku));
 
-                const newlyOosChecked = Array.from(document.querySelectorAll('.newly-oos-item:checked')).map(el => el.value);
-                const oosChecked = Array.from(document.querySelectorAll('.oos-item:checked')).map(el => el.value);
-                const bisSelected = reviewData.filter(r => r.severity === 'bis');
+                let out = ['SKU', 'Product', 'Status', 'OOS Since', 'Days OOS', ...dates].map(csvCell).join(',') + '\n';
+                rows.forEach(r => {
+                    out += [r.sku, r.name, r.status, r.since, r.daysOos, ...dates.map(d => r.days[d] ?? '')].map(csvCell).join(',') + '\n';
+                });
 
-                const newlyOos = reviewData.filter(r => r.severity === 'newly-oos' && newlyOosChecked.includes(r.sku));
-                const oos = reviewData.filter(r => r.severity === 'oos' && oosChecked.includes(r.sku));
-
-                // Update values
-                const range = XLSX.utils.decode_range(worksheet['!ref']);
-                for (let row = 2; row <= range.e.r + 1; row++) {
-                    const skuCell = worksheet[XLSX.utils.encode_col(1) + row];
-                    if (!skuCell || !skuCell.v) continue;
-                    
-                    const sku = skuCell.v;
-                    const cell = todayCol + row;
-                    
-                    if ([...newlyOos, ...oos].some(r => r.sku === sku)) {
-                        worksheet[cell] = { v: 1, t: 'n' };
-                    }
-                    else if (bisSelected.some(r => r.sku === sku)) {
-                        worksheet[cell] = { v: 0, t: 'n' };
-                    }
-                }
-
-                // Download with today's date
-                const wbout = XLSX.write(historyWorkbook, { bookType: 'xlsx', type: 'array' });
-                const blob = new Blob([wbout], { type: 'application/octet-stream' });
+                const blob = new Blob(['\uFEFF' + out], { type: 'text/csv;charset=utf-8' });
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
                 link.href = url;
-                link.download = `NL_Leadtime_History_${todayStr}.xlsx`;
+                link.download = `NL_OOS_History_${lastDate}.csv`;
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
                 URL.revokeObjectURL(url);
 
-                alert('✓ Historical file updated for ' + todayStr + ' and downloaded!');
+                alert(`✓ History updated (${dates[0]} → ${lastDate}) and downloaded!\n1 = OOS, 0 = in stock`);
             } catch (err) {
                 alert('Error: ' + err.message);
                 console.error(err);
