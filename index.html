@@ -271,7 +271,12 @@
                     console.log('Parsing timestamps...');
                     let lastSeenDate = null;  // Track the last date we saw
                     
-                    for (let i = 3; i < headers.length; i++) {
+                    // Find first date column (Tableau may add/remove dimension columns, e.g. Max. buffer_reason)
+                    let dataStart = headers.findIndex(h => /\d{4}-\d{2}-\d{2}/.test((h || '').trim()));
+                    if (dataStart < 0) dataStart = 3;
+                    const metricCol = dataStart - 1;
+
+                    for (let i = dataStart; i < headers.length; i++) {
                         let date = headers[i] ? headers[i].trim() : '';
                         const timestamp = timestamps[i] ? timestamps[i].trim() : '';
                         
@@ -355,7 +360,7 @@
                         
                         const country = parts[0].trim();
                         const sku = parts[1].trim();
-                        const metric = parts[2].trim();
+                        const metric = (parts[metricCol] || '').trim();
                         
                         // Only process NL country
                         if (country !== 'NL') continue;
